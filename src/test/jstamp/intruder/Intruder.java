@@ -73,20 +73,21 @@
 package jstamp.intruder;
 
 import org.deuce.Atomic;
+import transactionLib.*;
 
-public class Intruder extends Thread {
+    public class Intruder extends Thread {
 
-	char PARAM_ATTACK = 'a';
-		char  PARAM_LENGTH= 'l';
-		char PARAM_NUM    ='n';
-		char PARAM_SEED   ='s';
-		char PARAM_THREAD ='t';
+        char PARAM_ATTACK = 'a';
+        char  PARAM_LENGTH= 'l';
+        char PARAM_NUM    ='n';
+        char PARAM_SEED   ='s';
+        char PARAM_THREAD ='t';
 
-	int PARAM_DEFAULT_ATTACK =10;
-	int PARAM_DEFAULT_LENGTH =16;
+        int PARAM_DEFAULT_ATTACK =10;
+        int PARAM_DEFAULT_LENGTH =16;
 	int PARAM_DEFAULT_NUM =(1 << 16);
 	int PARAM_DEFAULT_SEED =1;
-	int PARAM_DEFAULT_THREAD =1;
+	int PARAM_DEFAULT_THREAD =2;
 
 	
     int percentAttack;
@@ -96,7 +97,7 @@ public class Intruder extends Thread {
     int numThread;
 
     int threadID;
-    Arg argument;
+    jstamp.intruder.Arg argument;
 
 
     public Intruder(String[] argv) 
@@ -212,7 +213,6 @@ public class Intruder extends Thread {
             }
             int flowId = packetPtr.flowId;
             int error;
-            
                 atomicProcess(decoderPtr, packetPtr);
             
 
@@ -234,32 +234,89 @@ public class Intruder extends Thread {
     
     }
 
-    @Atomic
+    //@Atomic
 	private byte[] atomicGetComplete(Decoder decoderPtr, int[] decodedFlowId) {
-		byte[] data;
-		data = decoderPtr.getComplete(decodedFlowId);
-		return data;
+        byte[] data = null;
+        while (true) {
+            try {
+                try {
+                    TX.TXbegin();
+                    data = decoderPtr.getComplete(decodedFlowId);
+                }
+                catch (TXLibExceptions.QueueIsEmptyException e) {
+                    break;
+                }
+		        finally{
+                    TX.TXend();
+                }
+            }
+            catch (TXLibExceptions.AbortException exp) {
+                System.out.println("Abort!! get complete I'm thread Num" + currentThread().getId());
+                continue;
+            }
+            return data;
+        }
+        return null;
 	}
 
-    @Atomic
+    //@Atomic
 	private void atomicProcess(Decoder decoderPtr, Packet packetPtr) {
-		int error;
-		error = decoderPtr.process(packetPtr,(packetPtr.length));
+        while (true) {
+            try {
+                try {
+                    TX.TXbegin();
+                    int error;
+            		error = decoderPtr.process(packetPtr,(packetPtr.length));
+                }
+                finally{
+                    TX.TXend();
+                }
+            }
+            catch (TXLibExceptions.AbortException exp) {
+                System.out.println("Abort!! atomic process I'm thread Num" + currentThread().getId());
+                continue;
+            }
+            break;
+        }
 	}
 
-    @Atomic
+    //@Atomic
 	private Packet atomicGetPacket(Stream streamPtr) {
-		Packet packetPtr;
-		packetPtr = streamPtr.getPacket();
-		return packetPtr;
-	}
+        Packet packetPtr= null;
+        while (true) {
+            try {
+                try {
+                    TX.TXbegin();
+                    packetPtr = streamPtr.getPacket();
+                } catch(TXLibExceptions.QueueIsEmptyException e) {
+                    System.out.println("Queue is Empty");
+                    break;
+                }
+
+                finally {
+                    TX.TXend();
+                }
+            }
+            catch (TXLibExceptions.AbortException exp) {
+                System.out.println("Abort!! Get packet I'm thread Num" + currentThread().getId());
+                continue;
+            }
+//            if (packetPtr!=null )
+//                System.out.println("Get packet I'm thread Num" + currentThread().getId() +" flowid=" + packetPtr.flowId);
+            return packetPtr;
+        }
+        return null;
+    }
 
     @Override
 	public void run()
     {
+        System.out.println("Before I'm thread Num" + currentThread().getId());
         Barrier.enterBarrier();
+        System.out.println("After I'm thread Num" + currentThread().getId());
         processPackets(argument);
-        Barrier.enterBarrier();
+        System.out.println("Processed I'm thread Num" + currentThread().getId());
+        //Barrier.enterBarrier();
     }
         
 /* =============================================================================
@@ -267,7 +324,7 @@ public class Intruder extends Thread {
  * =============================================================================
  */
 
-    public static void main(String[] argv) {
+    public static void main(String[] argv) throws InterruptedException {
 		/*
          * Initialization
          */
@@ -326,8 +383,10 @@ public class Intruder extends Thread {
 
         Barrier.enterBarrier();
         start=System.currentTimeMillis();
-        Barrier.enterBarrier();
-
+        //Barrier.enterBarrier();
+        for (i=0; i<in.numThread ;i++) {
+            intruders[i].join();
+       }
         long finish = System.currentTimeMillis();
         long elapsed = finish - start;
 
@@ -338,7 +397,7 @@ public class Intruder extends Thread {
         // Check solution
 
         Barrier.assertIsClear();
-        
+
         int numFound = 0;
 
         for(i =0;i<in.numThread;i++) {

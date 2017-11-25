@@ -83,6 +83,11 @@ public class Detector {
 	 * =============================================================================
 	 detector_t* detector_alloc ();
 	 */
+
+	//***************************************************************************//
+	// We didn't change anything dueto the fact that each thread has its own
+	// detector (and therefore a single vector_t and dictionary)
+	//***************************************************************************//
 	public Detector() {
 		dictionaryPtr = new Dictionary();
 		preprocessorVectorPtr = new Vector_t(1);
@@ -109,8 +114,8 @@ public class Detector {
 		int numPreprocessor = preprocessorVectorPtr.vector_getSize();
 		for (int p = 0; p < numPreprocessor; p++) {
 			Integer preprocessor = (Integer) preprocessorVectorPtr.vector_at(p);
-			if (preprocessor.intValue() == 1) {
-			} else if (preprocessor.intValue() == 2) {
+			if (preprocessor.intValue() == 1) {}
+			else if (preprocessor.intValue() == 2) {
 				for (int i = 0; i < str.length; i++) {
 					if (str[i] > 'A' && str[i] < 'Z') {
 						str[i] += (byte) 32;

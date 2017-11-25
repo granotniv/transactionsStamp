@@ -70,9 +70,13 @@ package jstamp.intruder;
  * =============================================================================
  */
 
+import transactionLib.LinkedList;
+import transactionLib.Queue;
+import transactionLib.TXLibExceptions;
+
 public class Decoder {
-	RBTree fragmentedMapPtr; /* contains list of packet_t* */
-	Queue_t decodedQueuePtr; /* contains decoded_t*  */
+	LinkedList fragmentedMapPtr; /* contains list of packet_t* */
+	Queue decodedQueuePtr; /* contains decoded_t*  */
 	int cnt;
 
 	/* =============================================================================
@@ -82,8 +86,8 @@ public class Decoder {
 	  */
 
 	public Decoder() {
-		fragmentedMapPtr = new RBTree(0);
-		decodedQueuePtr = new Queue_t(1024);
+		fragmentedMapPtr = new LinkedList();
+		decodedQueuePtr = new Queue();
 	}
 
 	/* =============================================================================
@@ -122,43 +126,63 @@ public class Decoder {
 		 * Add to fragmented map for reassembling
 		 */
 		if (numFragment > 1) {
-			List_t fragmentListPtr = (List_t) fragmentedMapPtr.get(flowId);
+			LinkedList fragmentListPtr = (LinkedList) fragmentedMapPtr.get(flowId);
 			if (fragmentListPtr == null) {
-				fragmentListPtr = new List_t(1); // packet_compareFragmentId
-				status = fragmentListPtr.insert(packetPtr);
-				status = fragmentedMapPtr.insert(flowId, fragmentListPtr);
+				fragmentListPtr = new LinkedList(); // packet_compareFragmentId
+				fragmentListPtr.put(fragmentId,packetPtr);
+				fragmentedMapPtr.put(flowId, fragmentListPtr);
 			} else {
-				List_Iter it = new List_Iter();
-				it.reset(fragmentListPtr);
-				System.out.print("");
-				Packet firstFragmentPtr = (Packet) it.next(fragmentListPtr);
-				int expectedNumFragment = firstFragmentPtr.numFragment;
-				if (numFragment != expectedNumFragment) {
-					status = fragmentedMapPtr.deleteNode(flowId);
-					return er.NUMFRAGMENT;
-				}
-				status = fragmentListPtr.insert(packetPtr);
+				//***********************************************************************//
+				// Next check was made (as we understand) to make sure that we don't
+				// put a fragment in the wrong list (checking that the num of fragments
+				// to expect is the same as the num of fragments as written in the first
+				// fragment in the list.
+				//***********************************************************************//
+				//List_Iter it = new List_Iter();
+				//it.reset(fragmentListPtr);
+				//System.out.print("");
+				//Packet firstFragmentPtr = (Packet) it.next(fragmentListPtr);
+				//int expectedNumFragment = firstFragmentPtr.numFragment;
+				//if (numFragment != expectedNumFragment) {
+				//	fragmentedMapPtr.remove(flowId);
+				//	return er.NUMFRAGMENT;
+				//}
+				fragmentListPtr.put(fragmentId,packetPtr);
 				/*
-				 * If we have all thefragments we can reassemble them
+				 * If we have all the fragments we can reassemble them
 				 */
-				if (fragmentListPtr.getSize() == numFragment) {
+				int currFragment;
+				for (currFragment=0; currFragment<numFragment; currFragment++) {
+					if (fragmentListPtr.get(currFragment)==null)
+						break;
+				}
+				if (currFragment==numFragment) {
 					int numBytes = 0;
 					int i = 0;
-					it.reset(fragmentListPtr);
-					while (it.hasNext(fragmentListPtr)) {
-						Packet fragmentPtr = (Packet) it.next(fragmentListPtr);
-						if (fragmentPtr.fragmentId != i) {
-							status = fragmentedMapPtr.deleteNode(flowId);
-							return er.INCOMPLETE; /* should be sequential */
-						}
+					//****************************************************************//
+					// Unnecessary check - already checked in previous loop in our
+					// implementation
+					//****************************************************************//
+					//it.reset(fragmentListPtr);
+//					while (it.hasNext(fragmentListPtr)) {
+//						Packet fragmentPtr = (Packet) it.next(fragmentListPtr);
+//						if (fragmentPtr.fragmentId != i) {
+//							fragmentedMapPtr.remove(flowId);
+//							return er.INCOMPLETE; /* should be sequential */
+//						}
+					Packet fragmentPtr = null;
+					for (currFragment=0; currFragment<numFragment; currFragment++) {
+						fragmentPtr = (Packet) fragmentListPtr.get(currFragment);
 						numBytes = numBytes + fragmentPtr.length;
-						i++;
+						//i++;
 					}
 					byte[] data = new byte[numBytes];
-					it.reset(fragmentListPtr);
+					//it.reset(fragmentListPtr);
+					fragmentPtr=null;
 					int index = 0;
-					while (it.hasNext(fragmentListPtr)) {
-						Packet fragmentPtr = (Packet) it.next(fragmentListPtr);
+					//while (it.hasNext(fragmentListPtr)) {
+					for (currFragment=0; currFragment<numFragment; currFragment++) {
+						fragmentPtr = (Packet) fragmentListPtr.get(currFragment);
 						for (i = 0; i < fragmentPtr.length; i++) {
 							data[index++] = fragmentPtr.data[i];
 						}
@@ -167,8 +191,8 @@ public class Decoder {
 
 					decodedPtr.flowId = flowId;
 					decodedPtr.data = data;
-					status = decodedQueuePtr.queue_push(decodedPtr);
-					status = fragmentedMapPtr.deleteNode(flowId);
+					decodedQueuePtr.enqueue(decodedPtr);
+					fragmentedMapPtr.remove(flowId);
 				}
 			}
 		} else {
@@ -183,7 +207,7 @@ public class Decoder {
 
 			decodedPtr.flowId = flowId;
 			decodedPtr.data = data;
-			status = decodedQueuePtr.queue_push(decodedPtr);
+			decodedQueuePtr.enqueue(decodedPtr);
 		}
 		return er.NONE;
 	}
@@ -198,16 +222,17 @@ public class Decoder {
 	 * -- If none, returns NULL
 	 * =============================================================================
 	 char* decoder_getComplete (decoder_t* decoderPtr, long* decodedFlowIdPtr); */
-	public byte[] getComplete(int[] decodedFlowId) {
-		byte[] data;
-		Decoded decodedPtr = (Decoded) decodedQueuePtr.queue_pop();
-		if (decodedPtr != null) {
-			decodedFlowId[0] = decodedPtr.flowId;
-			data = decodedPtr.data;
-		} else {
-			decodedFlowId[0] = -1;
-			data = null;
-		}
+	public byte[] getComplete(int[] decodedFlowId) throws TXLibExceptions.QueueIsEmptyException {
+		byte[] data = null;
+			Decoded decodedPtr = (Decoded) decodedQueuePtr.dequeue();
+			if (decodedPtr != null) {
+
+				decodedFlowId[0] = decodedPtr.flowId;
+				data = decodedPtr.data;
+			} else {
+				decodedFlowId[0] = -1;
+				data = null;
+			}
 		return data;
 	}
 }

@@ -1,17 +1,20 @@
 package jstamp.intruder;
+import transactionLib.LinkedList;
+import transactionLib.Queue;
+import transactionLib.TXLibExceptions;
 
 public class Stream {
 	int percentAttack;
 	Random randomPtr;
 	Vector_t allocVectorPtr;
-	Queue_t packetQueuePtr;
+	Queue packetQueuePtr;
 	RBTree attackMapPtr;
 
 	public Stream(int percentAttack) {
 		this.percentAttack = percentAttack;
 		randomPtr = new Random();
 		allocVectorPtr = new Vector_t(1);
-		packetQueuePtr = new Queue_t(1);
+		packetQueuePtr = new Queue();
 		attackMapPtr = new RBTree(0);
 	}
 
@@ -20,7 +23,7 @@ public class Stream {
 	 *    all extra bytes
 	 */
 	private void splitIntoPackets(byte[] str, int flowId, Random randomPtr,
-			Vector_t allocVectorPtr, Queue_t packetQueuePtr) {
+			Vector_t allocVectorPtr, Queue packetQueuePtr) {
 		int numByte = str.length;
 		int numPacket = randomPtr.random_generate() % numByte + 1;
 		int numDataByte = numByte / numPacket;
@@ -41,7 +44,7 @@ public class Stream {
 			for (i = beginIndex, z = 0; i < endIndex; z++, i++) {
 				bytes.data[z] = str[i];
 			}
-			status = packetQueuePtr.queue_push(bytes);
+			packetQueuePtr.enqueue(bytes);
 			beginIndex = endIndex;
 		}
 		int lastNumDataByte = numDataByte + numByte % numPacket;
@@ -54,7 +57,7 @@ public class Stream {
 		for (i = beginIndex, z = 0; i < endIndex; z++, i++) {
 			bytes.data[z] = str[i];
 		}
-		status = packetQueuePtr.queue_push(bytes);
+		packetQueuePtr.enqueue(bytes);
 	}
 
 	/*==================================================
@@ -68,7 +71,17 @@ public class Stream {
 		Detector detectorPtr = new Detector();
 		detectorPtr.addPreprocessor(2); // preprocessor_toLower
 		randomPtr.random_seed(seed);
-		packetQueuePtr.queue_clear();
+		while (!packetQueuePtr.isEmpty()) {
+			try {
+				packetQueuePtr.dequeue();
+			}
+			catch (TXLibExceptions.QueueIsEmptyException e) {
+				System.out.println(e.getMessage());
+			}
+			catch (TXLibExceptions.AbortException e) {
+				System.out.println(e.getMessage());
+			}
+		}
 		int range = '~' - ' ' + 1;
 		int f;
 		boolean status;
@@ -99,8 +112,37 @@ public class Stream {
 			}
 			splitIntoPackets(c, f, randomPtr, allocVectorPtr, packetQueuePtr);
 		}
-		packetQueuePtr.queue_shuffle(randomPtr);
+		queue_shuffle(packetQueuePtr);
 		return numAttack;
+	}
+
+	void queue_shuffle (Queue packetQueuePtr) {
+		LinkedList dequeuedNodes;
+		dequeuedNodes = new LinkedList();
+		int count=0;
+		int i=0;
+		while (!packetQueuePtr.isEmpty()) {
+			try {
+				dequeuedNodes.put(count, packetQueuePtr.dequeue());
+			}
+			catch (TXLibExceptions.QueueIsEmptyException e) {
+				System.out.println(e.getMessage());
+			}
+			catch (TXLibExceptions.AbortException e) {
+				System.out.println(e.getMessage());
+			}
+			count++;
+		}
+		for (i = 0; i < count; i++) {
+			int r1 = (int) (randomPtr.random_generate() % count);
+			int r2 = (int) (randomPtr.random_generate() % count);
+			Object tmp = dequeuedNodes.get(r1);
+			dequeuedNodes.put(r1,dequeuedNodes.get(r2));
+			dequeuedNodes.put(r2,tmp);
+		}
+		for (i=0; i<count; i++) {
+			packetQueuePtr.enqueue(dequeuedNodes.get(i));
+		}
 	}
 
 	/*========================================================
@@ -108,8 +150,8 @@ public class Stream {
 	 * -- If none, returns null
 	 *  ======================================================
 	 */
-	Packet getPacket() {
-		return (Packet) packetQueuePtr.queue_pop();
+	Packet getPacket() throws TXLibExceptions.QueueIsEmptyException {
+			return (Packet) packetQueuePtr.dequeue();
 	}
 
 	/* =======================================================
