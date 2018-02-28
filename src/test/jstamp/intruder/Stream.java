@@ -151,7 +151,7 @@ public class Stream {
 	 *  ======================================================
 	 */
 	Packet getPacket() throws TXLibExceptions.QueueIsEmptyException {
-			return (Packet) packetQueuePtr.dequeue();
+		return (Packet) packetQueuePtr.dequeue();
 	}
 
 	/* =======================================================

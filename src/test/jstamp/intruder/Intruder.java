@@ -87,7 +87,7 @@ import transactionLib.*;
         int PARAM_DEFAULT_LENGTH =16;
 	int PARAM_DEFAULT_NUM =(1 << 16);
 	int PARAM_DEFAULT_SEED =1;
-	int PARAM_DEFAULT_THREAD =2;
+	int PARAM_DEFAULT_THREAD =8;
 
 	
     int percentAttack;
@@ -251,7 +251,7 @@ import transactionLib.*;
                 }
             }
             catch (TXLibExceptions.AbortException exp) {
-                System.out.println("Abort!! get complete I'm thread Num" + currentThread().getId());
+//                System.out.println("Abort!! get complete I'm thread Num" + currentThread().getId());
                 continue;
             }
             return data;
@@ -273,7 +273,7 @@ import transactionLib.*;
                 }
             }
             catch (TXLibExceptions.AbortException exp) {
-                System.out.println("Abort!! atomic process I'm thread Num" + currentThread().getId());
+//                System.out.println("Abort!! atomic process I'm thread Num" + currentThread().getId());
                 continue;
             }
             break;
@@ -289,7 +289,7 @@ import transactionLib.*;
                     TX.TXbegin();
                     packetPtr = streamPtr.getPacket();
                 } catch(TXLibExceptions.QueueIsEmptyException e) {
-                    System.out.println("Queue is Empty");
+//                    System.out.println("Queue is Empty");
                     break;
                 }
 
@@ -298,7 +298,7 @@ import transactionLib.*;
                 }
             }
             catch (TXLibExceptions.AbortException exp) {
-                System.out.println("Abort!! Get packet I'm thread Num" + currentThread().getId());
+//                System.out.println("Abort!! Get packet I'm thread Num" + currentThread().getId());
                 continue;
             }
 //            if (packetPtr!=null )
@@ -311,11 +311,11 @@ import transactionLib.*;
     @Override
 	public void run()
     {
-        System.out.println("Before I'm thread Num" + currentThread().getId());
+//        System.out.println("Before I'm thread Num" + currentThread().getId());
         Barrier.enterBarrier();
-        System.out.println("After I'm thread Num" + currentThread().getId());
+//        System.out.println("After I'm thread Num" + currentThread().getId());
         processPackets(argument);
-        System.out.println("Processed I'm thread Num" + currentThread().getId());
+//        System.out.println("Processed I'm thread Num" + currentThread().getId());
         //Barrier.enterBarrier();
     }
         
