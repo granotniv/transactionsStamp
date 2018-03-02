@@ -1,5 +1,7 @@
 package jstamp.Labyrinth3D;
 
+import transactionLib.Queue;
+
 import java.io.DataInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -82,7 +84,7 @@ public class Maze {
 
 	
 	Grid gridPtr;
-    Queue_t workQueuePtr;
+    Queue workQueuePtr;
     Vector_t wallVectorPtr; /* contains source/destination pairs to route */
     Vector_t srcVectorPtr;  /* obstacles */
     Vector_t dstVectorPtr;  /* destinations */
@@ -95,12 +97,12 @@ public class Maze {
  * =============================================================================
  maze_t* maze_alloc ();
  */
-   public static Maze alloc() 
+   public static Maze alloc()
    {
        Maze mazePtr = new Maze();
 
        mazePtr.gridPtr = null;
-       mazePtr.workQueuePtr = Queue_t.queue_alloc(1024);
+       mazePtr.workQueuePtr = new Queue();
        mazePtr.wallVectorPtr = Vector_t.vector_alloc(1);
        mazePtr.srcVectorPtr = Vector_t.vector_alloc(1);
        mazePtr.dstVectorPtr = Vector_t.vector_alloc(1);
@@ -256,7 +258,7 @@ public class Maze {
             it.reset(workListPtr);
             while(it.hasNext(workListPtr)) {
                 Pair coordinatePairPtr = (Pair)it.next(workListPtr);
-                workQueuePtr.queue_push(coordinatePairPtr);
+                workQueuePtr.enqueue(coordinatePairPtr);
             }
 
             List_t.free(workListPtr);

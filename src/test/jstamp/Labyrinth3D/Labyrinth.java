@@ -69,9 +69,7 @@
  */
 
 package jstamp.Labyrinth3D;
-
-import java.io.IOException;
-
+import transactionLib.*;
 public class Labyrinth extends Thread{
 
     static String global_inputFile;
@@ -96,7 +94,7 @@ public class Labyrinth extends Thread{
         xCost = 1;
         yCost = 1;
         zCost = 2;
-        numThread = 1;
+        numThread = 64;
     }
 
     private void parseArg(String[] argv) {
@@ -178,7 +176,7 @@ public class Labyrinth extends Thread{
     }
         
 
-    public static void main(String[] argv) 
+    public static void main(String[] argv)
     {
         /*
          * Initailization
@@ -200,7 +198,7 @@ public class Labyrinth extends Thread{
         Router routerPtr = Router.alloc(labyrinth.xCost,labyrinth.yCost,
                                         labyrinth.zCost,labyrinth.bendCost);
 
-        List_t pathVectorListPtr = List_t.alloc(0);     // list_t.alloc(null)
+        Queue pathVectorListPtr = new Queue();     // list_t.alloc(null)
         /*
          * Run transactions
          */
@@ -230,20 +228,27 @@ public class Labyrinth extends Thread{
 
 
         int numPathRouted = 0;
-        List_Iter it = new List_Iter();
-
-        it.reset(pathVectorListPtr);
-        while(it.hasNext(pathVectorListPtr)) {
-	  Vector_t pathVectorPtr = (Vector_t)it.next(pathVectorListPtr);
-	  numPathRouted += pathVectorPtr.vector_getSize();
+//        List_Iter it = new List_Iter();
+//
+//        it.reset(pathVectorListPtr);
+        Vector_t pathVectorPtr = null;
+        List_t pathVectorListPtr_l = List_t.alloc(0);
+        while(!pathVectorListPtr.isEmpty()) {
+            try {
+                pathVectorPtr = (Vector_t) pathVectorListPtr.dequeue();
+                pathVectorListPtr_l.insert(pathVectorPtr);
+            } catch (TXLibExceptions.QueueIsEmptyException e) {
+                e.printStackTrace();
+            }
         }
+        numPathRouted += pathVectorPtr.vector_getSize();
 
         float elapsed = ((float)finish-(float)start)/1000;
 
         System.out.println("Paths routed    = " + numPathRouted);
         System.out.println("Elapsed time    = " + elapsed);
 
-        boolean stats = mazePtr.checkPaths(pathVectorListPtr,labyrinth.global_doPrint);
+        boolean stats = mazePtr.checkPaths(pathVectorListPtr_l,labyrinth.global_doPrint);
         if(!stats)
         {
             System.out.println("Verification not passed");

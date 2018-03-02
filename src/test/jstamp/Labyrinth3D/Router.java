@@ -75,6 +75,9 @@
 package jstamp.Labyrinth3D;
 
 import org.deuce.Atomic;
+import transactionLib.Queue;
+import transactionLib.TX;
+import transactionLib.TXLibExceptions;
 
 
 public class Router {
@@ -132,18 +135,22 @@ public class Router {
  * ============================================================================
  */
   private void PexpandToNeighbor(Grid myGridPtr, 
-				 int x,int y,int z, int value,Queue_Int queuePtr) {
+				 int x,int y,int z, int value,Queue queuePtr) {
     if (myGridPtr.isPointValid(x,y,z)) {
-      int neighborValue = myGridPtr.points_unaligned[x][y][z];
+      int neighborValue = (int)myGridPtr.points_unaligned[x][y].get(z);
       if (neighborValue == GRID_POINT_EMPTY) {
 	int neighborGridPointIndex = myGridPtr.getPointIndex(x,y,z);
-	myGridPtr.points_unaligned[x][y][z] = value;
-	queuePtr.queue_push(neighborGridPointIndex);
+    myGridPtr.points_unaligned[x][y].remove(z);
+    myGridPtr.points_unaligned[x][y].put(z,value);
+//	myGridPtr.points_unaligned[x][y][z] = value;
+	queuePtr.enqueue(neighborGridPointIndex);
       } else if (neighborValue != GRID_POINT_FULL) {
 	if (value < neighborValue) {
 	  int neighborGridPointIndex = myGridPtr.getPointIndex(x,y,z);
-	  myGridPtr.points_unaligned[x][y][z] = value;
-	  queuePtr.queue_push(neighborGridPointIndex);
+//	  myGridPtr.points_unaligned[x][y][z] = value;
+      myGridPtr.points_unaligned[x][y].remove(z);
+      myGridPtr.points_unaligned[x][y].put(z,value);
+	  queuePtr.enqueue(neighborGridPointIndex);
 	}
       }
     }
@@ -154,8 +161,8 @@ public class Router {
  * PdoExpansion
  * ============================================================================
  */
-    public boolean PdoExpansion (Router routerPtr,Grid myGridPtr,Queue_Int queuePtr,
-                                  Coordinate srcPtr,Coordinate dstPtr) {
+    public boolean PdoExpansion (Router routerPtr,Grid myGridPtr,Queue queuePtr,
+                                  Coordinate srcPtr,Coordinate dstPtr) throws TXLibExceptions.QueueIsEmptyException {
         int xCost = routerPtr.xCost;
         int yCost = routerPtr.yCost;
         int zCost = routerPtr.zCost;
@@ -165,11 +172,11 @@ public class Router {
          * This will likely decrease the area of the emitted wave.
          */
 
-        queuePtr.queue_clear();
+        while (!queuePtr.isEmpty()) queuePtr.dequeue();
 
         int srcGridPointIndex = myGridPtr.getPointIndex(srcPtr.x,srcPtr.y,srcPtr.z);
 
-        queuePtr.queue_push(srcGridPointIndex);
+        queuePtr.enqueue(srcGridPointIndex);
 
         myGridPtr.setPoint(srcPtr.x,srcPtr.y,srcPtr.z,0);
         myGridPtr.setPoint(dstPtr.x,dstPtr.y,dstPtr.z,GRID_POINT_EMPTY);
@@ -178,31 +185,31 @@ public class Router {
 	int height = myGridPtr.height;
 	int width = myGridPtr.width;
 	int area = height * width;
-        while (!queuePtr.queue_isEmpty()) {
-            int gridPointIndex = queuePtr.queue_pop();
+        while (!queuePtr.isEmpty()) {
+                int gridPointIndex = (int)queuePtr.dequeue();
 
-            if(gridPointIndex == dstGridPointIndex) {
-	      isPathFound = true;
-	      break;
-            }
-	    
-	    int z = gridPointIndex / area;
-	    int index2d = gridPointIndex % area;
-	    int y = index2d / width;
-	    int x = index2d % width;        
-	    int value = myGridPtr.points_unaligned[x][y][z];
-	    
-            /*
-             * Check 6 neighbors
-             *
-             * Potential Optimization: Only need to check 5 of these
-             */
-	    PexpandToNeighbor(myGridPtr, x+1, y,   z,   (value + xCost), queuePtr);
-	    PexpandToNeighbor(myGridPtr, x-1, y,   z,   (value + xCost), queuePtr);
-	    PexpandToNeighbor(myGridPtr, x, y+1,   z,   (value + yCost), queuePtr);
-	    PexpandToNeighbor(myGridPtr, x, y-1,   z,   (value + yCost), queuePtr);   
-	    PexpandToNeighbor(myGridPtr, x, y,   z+1,   (value + zCost), queuePtr);
-	    PexpandToNeighbor(myGridPtr, x, y,   z-1,   (value + zCost), queuePtr);
+                if(gridPointIndex == dstGridPointIndex) {
+              isPathFound = true;
+              break;
+                }
+
+            int z = gridPointIndex / area;
+            int index2d = gridPointIndex % area;
+            int y = index2d / width;
+            int x = index2d % width;
+            int value = (int)myGridPtr.points_unaligned[x][y].get(z);
+
+                /*
+                 * Check 6 neighbors
+                 *
+                 * Potential Optimization: Only need to check 5 of these
+                 */
+            PexpandToNeighbor(myGridPtr, x+1, y,   z,   (value + xCost), queuePtr);
+            PexpandToNeighbor(myGridPtr, x-1, y,   z,   (value + xCost), queuePtr);
+            PexpandToNeighbor(myGridPtr, x, y+1,   z,   (value + yCost), queuePtr);
+            PexpandToNeighbor(myGridPtr, x, y-1,   z,   (value + yCost), queuePtr);
+            PexpandToNeighbor(myGridPtr, x, y,   z+1,   (value + zCost), queuePtr);
+            PexpandToNeighbor(myGridPtr, x, y,   z-1,   (value + zCost), queuePtr);
 	    
         } /* iterate over work queue */
 	
@@ -321,7 +328,7 @@ public class Router {
  * =============================================================================
  * void router_solve (void* argPtr);
  */
-    public static void solve(Object argPtr) 
+    public static void solve(Object argPtr)
     {
         // TM_THREAD_ENTER();
         //
@@ -330,23 +337,42 @@ public class Router {
         Maze mazePtr = routerArgPtr.mazePtr;
         Vector_t myPathVectorPtr = Vector_t.vector_alloc(1);
 
-        Queue_t workQueuePtr = mazePtr.workQueuePtr;
+        Queue workQueuePtr = mazePtr.workQueuePtr;
         Grid gridPtr = mazePtr.gridPtr;
         Grid myGridPtr = Grid.scratchalloc(gridPtr.width,gridPtr.height,gridPtr.depth);
         int bendCost = routerPtr.bendCost;
-        Queue_Int myExpansionQueuePtr = Queue_Int.queue_alloc(-1);
+        Queue myExpansionQueuePtr = new Queue();
 
         /*
          * Iterate over work list to route each path. This involves an
          * 'expansion' and 'tracback' phase for each source/destination pair.
          */
         while(true) {
-            Pair coordinatePairPtr;
+            Pair coordinatePairPtr=null;
             
             // TM_BEGIN();
-            
-                coordinatePairPtr = atomicMethodOne(workQueuePtr);
-            
+
+
+                //coordinatePairPtr = atomicMethodOne(workQueuePtr);
+            while (true) {
+                try {
+                    try {
+                        TX.TXbegin();
+                        coordinatePairPtr = atomicMethodOne(workQueuePtr);
+                    }
+                    catch (TXLibExceptions.QueueIsEmptyException e) {
+                        break;
+                    }
+                    finally{
+                        TX.TXend();
+                    }
+                }
+                catch (TXLibExceptions.AbortException exp) {
+                    continue;
+                }
+                break;
+            }
+
             // TM_END();
             //
             
@@ -366,9 +392,20 @@ public class Router {
         /*
          * Add my paths to global list
          */
-        List_t pathVectorListPtr = routerArgPtr.pathVectorListPtr;
+        Queue pathVectorListPtr = routerArgPtr.pathVectorListPtr;
 
-            atomicMethodOne(myPathVectorPtr, pathVectorListPtr);
+        while (true) {
+            try {
+                    TX.TXbegin();
+                    atomicMethodOne(myPathVectorPtr, pathVectorListPtr);
+                    TX.TXend();
+            }
+            catch (TXLibExceptions.AbortException exp) {
+                continue;
+            }
+            break;
+        }
+//            atomicMethodOne(myPathVectorPtr, pathVectorListPtr);
 
         myGridPtr = null;
         myExpansionQueuePtr = null;
@@ -379,7 +416,7 @@ public class Router {
     }
 
     private static void attempt(Grid myGridPtr, Grid gridPtr, Router routerPtr, 
-    		Queue_Int myExpansionQueuePtr, Coordinate srcPtr, Coordinate dstPtr, int bendCost, Vector_t myPathVectorPtr) {
+    		Queue myExpansionQueuePtr, Coordinate srcPtr, Coordinate dstPtr, int bendCost, Vector_t myPathVectorPtr) {
         MutableBoolean success = new MutableBoolean(false);
         Vector_t pointVectorPtr = null;
     MutableBoolean retry= new MutableBoolean(true);
@@ -388,10 +425,26 @@ public class Router {
     while(retry.value) {
       retry.value=false;
       
-	pointVectorPtr = atomicMethodThree(myGridPtr, gridPtr, routerPtr,
-			myExpansionQueuePtr, srcPtr, dstPtr, bendCost, success,
-			pointVectorPtr, retry);
-      
+
+        while (true) {
+            try {
+                try {
+                    TX.TXbegin();
+                    pointVectorPtr = atomicMethodThree(myGridPtr, gridPtr, routerPtr,
+                            myExpansionQueuePtr, srcPtr, dstPtr, bendCost, success,
+                            pointVectorPtr, retry);                }
+                catch (TXLibExceptions.QueueIsEmptyException e) {
+                    break;
+                }
+                finally{
+                    TX.TXend();
+                }
+            }
+            catch (TXLibExceptions.AbortException exp) {
+                continue;
+            }
+            break;
+        }
     }
     
         if(success.value) {
@@ -400,13 +453,13 @@ public class Router {
         }
 }
 
-    @Atomic
+//    @Atomic
 	private static Vector_t atomicMethodThree(Grid myGridPtr, Grid gridPtr,
-			Router routerPtr, Queue_Int myExpansionQueuePtr, Coordinate srcPtr,
+			Router routerPtr, Queue myExpansionQueuePtr, Coordinate srcPtr,
 			Coordinate dstPtr, int bendCost, MutableBoolean success,
-			Vector_t pointVectorPtr, MutableBoolean retry) {
+			Vector_t pointVectorPtr, MutableBoolean retry) throws TXLibExceptions.QueueIsEmptyException {
 		Grid.copy(myGridPtr, gridPtr); /* ok if not most up-to-date */
-		if(routerPtr.PdoExpansion(routerPtr,myGridPtr,myExpansionQueuePtr,srcPtr,dstPtr)) {
+        if(routerPtr.PdoExpansion(routerPtr,myGridPtr,myExpansionQueuePtr,srcPtr,dstPtr)) {
 		  pointVectorPtr = routerPtr.PdoTraceback(myGridPtr,dstPtr,bendCost);
 		  if (pointVectorPtr != null) {
 		    if (gridPtr.TM_addPath(pointVectorPtr)) {
@@ -419,19 +472,19 @@ public class Router {
 		return pointVectorPtr;
 	}
 
-	@Atomic
+//	@Atomic
 	private static void atomicMethodOne(Vector_t myPathVectorPtr,
-			List_t pathVectorListPtr) {
-		pathVectorListPtr.insert(myPathVectorPtr);
+			Queue pathVectorListPtr) {
+		pathVectorListPtr.enqueue(myPathVectorPtr);
 	}
 
-    @Atomic
-	private static Pair atomicMethodOne(Queue_t workQueuePtr) {
+//    @Atomic
+	private static Pair atomicMethodOne(Queue workQueuePtr) throws TXLibExceptions.QueueIsEmptyException {
 		Pair coordinatePairPtr;
-		if(workQueuePtr.queue_isEmpty()) {
+		if(workQueuePtr.isEmpty()) {
 		    coordinatePairPtr = null;
 		} else {
-		    coordinatePairPtr = (Pair)workQueuePtr.queue_pop();
+		    coordinatePairPtr = (Pair)workQueuePtr.dequeue();
 		}
 		return coordinatePairPtr;
 	}

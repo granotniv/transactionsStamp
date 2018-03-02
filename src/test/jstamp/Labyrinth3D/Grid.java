@@ -70,9 +70,9 @@
 
 package jstamp.Labyrinth3D;
 
-import java.lang.Long;
+import transactionLib.LinkedList;
+
 import java.lang.reflect.Array;
-import java.util.Arrays;
 
 
 public class Grid {
@@ -84,7 +84,7 @@ public class Grid {
 	public int width;
     public int height;
     public int depth;
-    public int[][][] points_unaligned;
+    public LinkedList[][] points_unaligned;
 
     public Grid() {}
 
@@ -104,13 +104,19 @@ public class Grid {
     grid.height = height;
     grid.depth = depth;
     
-    int[][][] points_unaligned = new int[width][height][depth];
+    //int[][][] points_unaligned = new int[width][height][depth];
+    LinkedList[][] points_unaligned = new LinkedList[width][height];
+    for (int i = 0; i<width; i++) {
+      for (int j=0; j< height; j++) {
+        points_unaligned[i][j] = new LinkedList();
+      }
+    }
     
     
     for(int i=0;i<width;i++)
       for(int j=0;j<height;j++)
-	for(int k=0;k<depth;k++)
-	  points_unaligned[i][j][k]= GRID_POINT_EMPTY;
+	    for(int k=0;k<depth;k++)
+	      points_unaligned[i][j].put(k,GRID_POINT_EMPTY);
     
     grid.points_unaligned = points_unaligned;
     
@@ -122,7 +128,12 @@ public class Grid {
     grid.width = width;
     grid.height = height;
     grid.depth = depth;
-    int[][][] points_unaligned = /*scratch*/ new int[width][height][depth];
+    LinkedList[][] points_unaligned = new LinkedList[width][height];
+    for (int i = 0; i<width; i++) {
+      for (int j=0; j< height; j++) {
+        points_unaligned[i][j] = new LinkedList();
+      }
+    }
     grid.points_unaligned = points_unaligned;
     return grid;         
   }
@@ -160,8 +171,18 @@ public class Grid {
       int width=srcGridPtr.width;
       int height=srcGridPtr.height;
       int depth=srcGridPtr.depth;
-      Object deepCopyArr = deepCopy(srcGridPtr.points_unaligned);
-      dstGridPtr.points_unaligned = (int[][][]) deepCopyArr;
+//      Object deepCopyArr = deepCopy(srcGridPtr.points_unaligned);
+//      dstGridPtr.points_unaligned = (int[][][]) deepCopyArr;
+      LinkedList[][] points_unaligned = new LinkedList[width][height];
+
+      for (int i = 0; i<width; i++) {
+        for (int j=0; j< height; j++) {
+          points_unaligned[i][j] = new LinkedList();
+          for(int k=0;k<depth;k++)
+            points_unaligned[i][j].put(k,srcGridPtr.points_unaligned[i][j].get(k));
+        }
+      }
+      dstGridPtr.points_unaligned = points_unaligned;
       //System.deepArrayCopy(dstGridPtr.points_unaligned, srcGridPtr.points_unaligned);
     }      
   }
@@ -175,9 +196,8 @@ public class Grid {
     return x>=0 && x< width && y>=0 && y<height && z>=0 && z<depth;
   }
 
-
   public int getPoint(int x,int y,int z) {
-    return this.points_unaligned[x][y][z];
+    return (int)this.points_unaligned[x][y].get(z);
   }
 
 
@@ -187,8 +207,7 @@ public class Grid {
  bool_t grid_isPointEmpty (grid_t* gridPtr, long x, long y, long z); {
  */
 
-  public boolean isPointEmpty(int x,int y,int z) {
-    return points_unaligned[x][y][z]==GRID_POINT_EMPTY;
+  public boolean isPointEmpty(int x,int y,int z) {return ((int)points_unaligned[x][y].get(z)==GRID_POINT_EMPTY);
   }
 
 
@@ -199,7 +218,7 @@ public class Grid {
  bool_t grid_isPointFull (grid_t* gridPtr, long x, long y, long z);
  */
   public boolean isPointFull(int x,int y,int z) {
-    return points_unaligned[x][y][z]==GRID_POINT_FULL;
+    return (int)points_unaligned[x][y].get(z)==GRID_POINT_FULL;
   }
 
 
@@ -209,7 +228,8 @@ public class Grid {
  void grid_setPoint (grid_t* gridPtr, long x, long y, long z, long value);
  */
   public void setPoint(int x,int y,int z,int value) {
-    points_unaligned[x][y][z] = value;
+    points_unaligned[x][y].remove(z);
+    points_unaligned[x][y].put(z,value);
   }
 
 
@@ -228,8 +248,8 @@ void grid_addPath (grid_t* gridPtr, vector_t* pointVectorPtr);
       int x = coordinatePtr.x;
       int y = coordinatePtr.y;
       int z = coordinatePtr.z;
-
-      points_unaligned[x][y][z]=GRID_POINT_FULL;
+      points_unaligned[x][y].remove(z);
+      points_unaligned[x][y].put(z,GRID_POINT_FULL);
     }
   }
 
@@ -247,7 +267,7 @@ void grid_addPath (grid_t* gridPtr, vector_t* pointVectorPtr);
       int index2d = gridPointIndex % area;
       int y = index2d / width;
       int x = index2d % width;        
-      if (points_unaligned[x][y][z] != GRID_POINT_EMPTY) {
+      if ((int)points_unaligned[x][y].get(z) != GRID_POINT_EMPTY) {
 	dowrites=false;
       }
     }
@@ -258,8 +278,12 @@ void grid_addPath (grid_t* gridPtr, vector_t* pointVectorPtr);
       int index2d = gridPointIndex % area;
       int y = index2d / width;
       int x = index2d % width;
-      int[] array=points_unaligned[x][y];
-      if (dowrites) array[z] = GRID_POINT_FULL;
+//      int[] array=points_unaligned[x][y];
+      if (dowrites) {
+//        array[z] = GRID_POINT_FULL;
+        points_unaligned[x][y].remove(z);
+        points_unaligned[x][y].put(z,GRID_POINT_FULL);
+      }
     }
     return !dowrites;
   }
@@ -278,7 +302,7 @@ void grid_addPath (grid_t* gridPtr, vector_t* pointVectorPtr);
       System.out.println("[z ="+z+"]");
       for (int x = 0; x < width; x++) {
 	for (int y = 0; y < height; y++) {
-	  String str=String.valueOf(points_unaligned[x][y][z]);
+	  String str=String.valueOf(points_unaligned[x][y].get(z));
 	  for(int sp=0; sp<(4-str.length());sp++)
 	    System.out.print(" ");
 	  System.out.print(str);
